@@ -1,0 +1,155 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>El Prestigio · Gestión</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#faf7f5;--cd:#fff;--tx:#2a1f1d;--mu:#7a6a66;--ac:#9b1c2c;--ok:#2e7d4f;--wa:#b87a00;--bd:#e6dcd8}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1b1514;--cd:#261d1b;--tx:#f3e9e6;--mu:#a8948f;--ac:#e0566a;--ok:#5cc28a;--wa:#e5ad3a;--bd:#3d302d}}
+:root[data-theme=dark]{--bg:#1b1514;--cd:#261d1b;--tx:#f3e9e6;--mu:#a8948f;--ac:#e0566a;--ok:#5cc28a;--wa:#e5ad3a;--bd:#3d302d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--ac);z-index:10}
+header{background:var(--ac);color:#fff;padding:12px 14px 0;position:sticky;top:env(safe-area-inset-top,0px);z-index:9}
+header h1{margin:0 0 8px;font-size:18px}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{flex:none;background:transparent;color:#ffd9de;border:0;padding:9px 12px;font:inherit;border-bottom:3px solid transparent;cursor:pointer}
+nav button.on{color:#fff;border-color:#fff;font-weight:600}
+main{padding:14px;max-width:980px;margin:auto}
+.g{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px}
+.c{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
+.k b{display:block;font-size:21px}.k span{color:var(--mu);font-size:12px}
+h2{font-size:16px;margin:0 0 8px}.mu{color:var(--mu);font-size:13px}
+.w{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{padding:6px 5px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}th{font-size:12px;color:var(--mu)}
+input,select,button.b{font:inherit;padding:7px;border:1px solid var(--bd);border-radius:7px;background:var(--bg);color:var(--tx);max-width:100%}
+input.n{width:105px}button.b{background:var(--ac);color:#fff;border:0;cursor:pointer}button.x{background:none;border:0;color:var(--mu);cursor:pointer;font-size:16px}
+.r{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.bar{height:8px;background:var(--bd);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.ok{color:var(--ok)}.bad{color:var(--ac)}.wa{color:var(--wa)}
+.tag{display:inline-block;background:var(--bd);border-radius:12px;padding:2px 9px;margin:2px;font-size:13px}
+</style></head><body>
+<header><h1>🥩 El Prestigio · Gestión</h1><nav id="nav"></nav></header>
+<main id="app"><p class="mu">Cargando…</p></main>
+<script>
+const WK=4.33,TABS=[['tablero','Tablero'],['equilibrio','Punto de equilibrio'],['equipo','Equipo y control'],['stock','Stock']];
+const COLS=['gastos','productos','areas','empleados','controles','stock'];
+const PTS={cumple:['Cumple',2],parcial:['Parcialmente',1],poco:['Poco satisfactoria',0],falta:['En falta',-1]};
+var db,D={},tab='tablero',pend=false,ctl={area:'',emp:'',fecha:''},mes='';
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const M=n=>'$'+Math.round(n||0).toLocaleString('es-AR'),N=n=>(+n||0).toLocaleString('es-AR');
+const iso=d=>{const z=new Date(d.getTime()-d.getTimezoneOffset()*6e4);return z.toISOString().slice(0,10)};
+var sf0={};const today=iso(new Date());mes=today.slice(0,7);ctl.fecha=today;
+const wStart=(()=>{const d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d)})();
+const uid=()=>'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const L=c=>D[c]||[],pn=id=>(L('productos').find(p=>p.id===id)||{}).nombre||'—';
+const gan=p=>p.margen*1;
+function stockCalc(pid){const m=L('stock').filter(s=>s.prod===pid).sort((a,b)=>(a.fecha+a.ts).localeCompare(b.fecha+b.ts));
+ let i=-1;m.forEach((s,k)=>{if(s.tipo==='recuento')i=k});let q=i>=0?m[i].cant:0,w=i>=0?(+m[i].kg||0):0;
+ m.slice(i+1).forEach(s=>{const g=s.tipo==='ingreso'?1:-1;if(s.tipo!=='merma')q+=g*s.cant;w+=g*(+s.kg||0)});return{u:q,kg:w}}
+const stockActual=pid=>stockCalc(pid).u;
+const dAdd=(d,n)=>{const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return iso(x)},prevStart=dAdd(wStart,-7);
+const kgS=(t,f,to)=>L('stock').filter(s=>s.tipo===t&&s.fecha>=f&&(!to||s.fecha<to)).reduce((a,s)=>a+(+s.kg||0),0);
+const kgP=(pid,t)=>L('stock').filter(s=>s.prod===pid&&s.tipo===t&&s.fecha>=wStart).reduce((a,s)=>a+(+s.kg||0),0);
+function kgBlock(){const ci=kgS('ingreso',wStart),cm=kgS('mostrador',wStart),cp=kgS('produccion',wStart),me=kgS('merma',wStart),ca=kgS('ingreso',prevStart,wStart),ma=kgS('mostrador',prevStart,wStart),pm=ci?me/ci*100:0;
+ return `<div class="c"><h2>Kilos de la semana</h2><div class="g" style="margin:0"><div class="k"><span>Kg comprados</span><b>${N(ci)}</b><span>semana anterior: ${N(ca)} kg</span></div><div class="k"><span>Kg a mostrador (venta)</span><b>${N(cm)}</b><span>semana anterior: ${N(ma)} kg</span></div><div class="k"><span>Kg a producción</span><b>${N(cp)}</b></div><div class="k"><span>Merma / desperdicio</span><b class="${pm>3?'bad':''}">${N(me)} kg</b><span>${pm.toFixed(1).replace('.',',')}% de lo comprado</span></div></div></div>`}
+function calc(){const g=L('gastos').reduce((a,x)=>a+(+x.monto||0),0),pe=g/WK;
+ let mn=0,mx=0,real=0;const rows=L('productos').map(p=>{const e=L('stock').filter(s=>s.prod===p.id&&s.tipo==='ingreso'&&s.fecha>=wStart).reduce((a,s)=>a+s.cant,0);
+  mn+=gan(p)*p.min;mx+=gan(p)*p.max;real+=gan(p)*e;return{p,e,st:stockActual(p.id)}});
+ return{g,pe,mn,mx,real,rows,cob:pe?real/pe:0}}
+function score(){const r={};L('controles').filter(c=>c.fecha.startsWith(mes)).forEach(c=>{r[c.emp]=(r[c.emp]||0)+PTS[c.res][1]});
+ return L('empleados').map(e=>({e,pts:r[e.id]||0})).sort((a,b)=>b.pts-a.pts)}
+var vTablero=function(){const c=calc(),sc=score(),mon=new Date().getDay()===1;
+ return `${mon?'<div class="c wa"><b>Hoy es lunes:</b> toca el recuento de stock por la tarde.</div>':''}
+ <div class="g"><div class="c k"><span>Gastos del mes</span><b>${M(c.g)}</b></div><div class="c k"><span>Punto de equilibrio semanal</span><b>${M(c.pe)}</b></div>
+ <div class="c k"><span>Ganancia generada esta semana</span><b class="${c.cob>=1?'ok':'wa'}">${M(c.real)}</b></div><div class="c k"><span>Cobertura del equilibrio</span><b class="${c.cob>=1?'ok':'bad'}">${Math.round(c.cob*100)}%</b></div></div>
+ ${kgBlock()}
+ <div class="c"><h2>Compras de la semana vs. objetivo</h2><p class="mu">Ganancia potencial semanal con el objetivo: ${M(c.mn)} a ${M(c.mx)}. Equilibrio: ${M(c.pe)}.</p><div class="w"><table><tr><th>Producto</th><th>Ingresó</th><th>Objetivo</th><th style="width:30%">Avance</th><th>Stock actual</th><th>Kg comprados</th><th>Kg a mostrador</th></tr>
+ ${c.rows.map(({p,e,st})=>`<tr><td>${esc(p.nombre)}</td><td>${N(e)}</td><td>${N(p.min)}–${N(p.max)}</td><td><div class="bar"><i style="width:${Math.min(100,p.min?e/p.min*100:0)}%"></i></div></td><td>${N(st)}</td><td>${N(kgP(p.id,'ingreso'))}</td><td>${N(kgP(p.id,'mostrador'))}</td></tr>`).join('')||'<tr><td colspan=7 class="mu">Sin productos cargados.</td></tr>'}</table></div></div>
+ <div class="c"><h2>Puntaje de empleados (${mes})</h2>${sc.length?sc.slice(0,8).map(x=>`<div class="r"><span style="flex:1">${esc(x.e.nombre)} <span class="mu">${esc(L('areas').find(a=>a.id===x.e.area)?.nombre||'')}</span></span><b>${x.pts} pts</b></div>`).join(''):'<p class="mu">Todavía no hay empleados cargados.</p>'}</div>
+ <div class="c"><h2>Últimos movimientos de stock</h2>${movs(8)}</div>`}
+;function movs(n,del){const T={ingreso:'Ingreso (compra)',mostrador:'Salida a mostrador',produccion:'Salida a producción',recuento:'Recuento',merma:'Merma / desperdicio'};
+ const m=[...L('stock')].sort((a,b)=>(b.fecha+b.ts).localeCompare(a.fecha+a.ts)).slice(0,n);
+ return m.length?`<div class="w"><table>${m.map(s=>`<tr><td>${s.fecha}</td><td>${T[s.tipo]}</td><td>${esc(pn(s.prod))}</td><td>${s.tipo==='merma'?'—':N(s.cant)}</td><td>${s.kg?N(s.kg)+' kg':''}${s.kgs?` <span class="mu">(${s.kgs.map(x=>N(x)).join(' · ')})</span>`:''}</td><td class="mu">${esc(s.nota||'')}</td>${del?`<td><button class="x" data-del="stock" data-id="${s.id}">✕</button></td>`:''}</tr>`).join('')}</table></div>`:'<p class="mu">Sin movimientos todavía.</p>'}
+function vEq(){const c=calc();
+ return `<div class="c"><h2>Gastos mensuales</h2><div class="w"><table>${L('gastos').map(g=>`<tr><td><input data-c="gastos" data-id="${g.id}" data-f="nombre" value="${esc(g.nombre)}"></td><td><input class="n" type="number" data-c="gastos" data-id="${g.id}" data-f="monto" data-n value="${g.monto}"></td><td><button class="x" data-del="gastos" data-id="${g.id}">✕</button></td></tr>`).join('')}</table></div>
+ <div class="r"><input id="gn" placeholder="Nuevo gasto"><input id="gm" class="n" type="number" placeholder="Monto"><button class="b" data-add="gasto">Agregar</button></div>
+ <p><b>Total mensual: ${M(c.g)}</b> · Equilibrio semanal: <b>${M(c.pe)}</b> <span class="mu">(÷ ${WK} semanas)</span></p></div>
+ <div class="c"><h2>Márgenes y compras objetivo por semana</h2><div class="w"><table><tr><th>Producto</th><th>Margen</th><th>Mín.</th><th>Máx.</th><th></th></tr>
+ ${L('productos').map(p=>`<tr><td><input data-c="productos" data-id="${p.id}" data-f="nombre" value="${esc(p.nombre)}"></td><td><input class="n" type="number" data-c="productos" data-id="${p.id}" data-f="margen" data-n ${p.pct?'data-p':''} value="${p.pct?p.margen*100:p.margen}"> ${p.pct?'%':'$/u'}</td>
+ <td><input class="n" type="number" data-c="productos" data-id="${p.id}" data-f="min" data-n value="${p.min}"></td><td><input class="n" type="number" data-c="productos" data-id="${p.id}" data-f="max" data-n value="${p.max}"></td><td><button class="x" data-del="productos" data-id="${p.id}">✕</button></td></tr>`).join('')}</table></div>
+ <p class="mu">Cantidades por semana (unidades, cajas o pesos comprados si el margen es un %).</p>
+ <div class="r"><input id="pnm" placeholder="Nuevo producto"><input id="pmg" class="n" type="number" placeholder="Margen $/u"><input id="pmi" class="n" type="number" placeholder="Mín."><input id="pma" class="n" type="number" placeholder="Máx."><button class="b" data-add="prod">Agregar</button></div>
+ <p>Ganancia semanal esperada: <b>${M(c.mn)}</b> a <b>${M(c.mx)}</b> → ${c.mn>=c.pe?'<span class="ok">cubre el equilibrio</span>':c.mx>=c.pe?'<span class="wa">cubre solo con el objetivo alto</span>':'<span class="bad">no alcanza el equilibrio</span>'}</p></div>`}
+function vEq2(){const A=L('areas'),a=A.find(x=>x.id===ctl.area)||A[0],E=a?L('empleados').filter(e=>e.area===a.id):[],e=E.find(x=>x.id===ctl.emp)||E[0];
+ return `<div class="c"><h2>Áreas, puntos a controlar y empleados</h2>${A.map(x=>`<div class="c"><div class="r"><input data-c="areas" data-id="${x.id}" data-f="nombre" value="${esc(x.nombre)}"><button class="x" data-del="areas" data-id="${x.id}">✕</button></div>
+ <div class="mu">Puntos a controlar:</div>${(x.puntos||[]).map((p,i)=>`<span class="tag">${esc(p)} <button class="x" data-delpt="${x.id}" data-i="${i}">✕</button></span>`).join('')}
+ <div class="r"><input id="pt-${x.id}" placeholder="Nuevo punto de control"><button class="b" data-addpt="${x.id}">Agregar</button></div>
+ <div class="mu">Empleados:</div>${L('empleados').filter(e=>e.area===x.id).map(e=>`<span class="tag">${esc(e.nombre)} <button class="x" data-del="empleados" data-id="${e.id}">✕</button></span>`).join('')}
+ <div class="r"><input id="em-${x.id}" placeholder="Nombre del empleado"><button class="b" data-addem="${x.id}">Agregar</button></div></div>`).join('')}
+ <div class="r"><input id="an" placeholder="Nueva área"><button class="b" data-add="area">Agregar área</button></div></div>
+ <div class="c"><h2>Check-list del supervisor</h2><div class="r"><select id="ca">${A.map(x=>`<option value="${x.id}" ${a&&x.id===a.id?'selected':''}>${esc(x.nombre)}</option>`).join('')}</select>
+ <select id="ce">${E.map(x=>`<option value="${x.id}" ${e&&x.id===e.id?'selected':''}>${esc(x.nombre)}</option>`).join('')||'<option value="">Sin empleados</option>'}</select><input id="cf" type="date" value="${ctl.fecha}"></div>
+ ${a&&e?(a.puntos||[]).map((p,i)=>`<div class="r"><span style="flex:1 1 100%"><b>${esc(p)}</b></span><select data-pt="${i}"><option value="">—</option>${Object.entries(PTS).map(([k,v])=>`<option value="${k}">${v[0]} (${v[1]>0?'+':''}${v[1]})</option>`).join('')}</select><input data-ob="${i}" placeholder="Observación" style="flex:1"></div>`).join('')+'<button class="b" data-save>Guardar control</button>':'<p class="mu">Elegí un área con empleados y puntos de control.</p>'}</div>
+ <div class="c"><h2>Ranking del mes</h2><div class="r"><input type="month" id="cm" value="${mes}"></div>${score().map(x=>`<div class="r"><span style="flex:1">${esc(x.e.nombre)}</span><b>${x.pts} pts</b></div>`).join('')||'<p class="mu">Sin datos.</p>'}</div>
+ <div class="c"><h2>Registros recientes</h2><div class="w"><table>${[...L('controles')].sort((a,b)=>(b.fecha+b.ts).localeCompare(a.fecha+a.ts)).slice(0,15).map(c=>`<tr><td>${c.fecha}</td><td>${esc(c.nom)}</td><td>${esc(c.punto)}</td><td>${PTS[c.res][0]}</td><td class="mu">${esc(c.obs||'')}</td><td><button class="x" data-del="controles" data-id="${c.id}">✕</button></td></tr>`).join('')}</table></div></div>`}
+function vStock(){const P=L('productos');
+ return `<div class="c"><h2>Registrar movimiento</h2><div class="r"><select id="st"><option value="ingreso">Ingreso (compra)</option><option value="mostrador">Salida a mostrador</option><option value="produccion">Salida a producción</option><option value="recuento">Recuento (lunes)</option><option value="merma">Merma / desperdicio</option></select>
+ <select id="sp">${P.map(p=>`<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select><input id="sc" class="n" type="number" placeholder="Unidades"><input id="sk" placeholder="Kilos de cada unidad (ej: 118,5 121 125)" style="min-width:240px"><input id="sf" type="date" value="${today}"><input id="sn" placeholder="Observación / detalle"><button class="b" data-add="stock">Guardar</button></div>
+ <p class="mu">Kilos: un número por unidad, separados por espacio (ej.: 5 medias reses → <i>118,5 121 125 119 122,5</i>); las unidades se completan solas. En una merma cargá solo los kilos y el detalle. El recuento fija el stock real; los movimientos posteriores lo suman o restan.</p></div>
+ <div class="c"><h2>Stock actual</h2><div class="w"><table><tr><th>Producto</th><th>Stock (u)</th><th>Kg estimados</th></tr>${P.map(p=>{const k=stockCalc(p.id);return `<tr><td>${esc(p.nombre)}</td><td>${N(k.u)}</td><td>${N(k.kg)}</td></tr>`}).join('')}</table></div></div>
+ <div class="c"><h2>Movimientos</h2>${movs(40,1)}</div>`}
+function render(){if(document.activeElement&&/INPUT|SELECT/.test(document.activeElement.tagName)){pend=true;return}pend=false;
+ $('#nav').innerHTML=TABS.map(([k,v])=>`<button data-tab="${k}" class="${k===tab?'on':''}">${v}</button>`).join('');
+ $('#app').innerHTML={tablero:vTablero,equilibrio:vEq,equipo:vEq2,stock:vStock}[tab]();if(tab==='stock')for(const k in sf0){const el=$('#'+k);if(el&&sf0[k])el.value=sf0[k]}}
+const col=c=>db.collection(c),put=(c,o)=>{const id=uid();return col(c).doc(id).set(o)};
+document.addEventListener('focusout',()=>setTimeout(()=>{if(pend)render()},150));
+document.addEventListener('change',async e=>{const t=e.target;
+ if(['st','sp','sf'].includes(t.id))sf0[t.id]=t.value;else if(t.id==='ca'){ctl.area=t.value;ctl.emp='';render()}else if(t.id==='ce')ctl.emp=t.value;else if(t.id==='cf')ctl.fecha=t.value;else if(t.id==='cm'){mes=t.value;render()}
+ else if(t.dataset.c){let v=t.value;if(t.dataset.n){v=+v||0;if(t.dataset.p)v/=100}try{await col(t.dataset.c).doc(t.dataset.id).update({[t.dataset.f]:v})}catch(x){alert('No se pudo guardar')}}});
+document.addEventListener('click',async e=>{const t=e.target.closest('button');if(!t)return;const d=t.dataset,v=id=>($('#'+id)||{}).value;
+ try{if(d.tab){tab=d.tab;render()}
+ else if(d.del){if(confirm('¿Eliminar?'))await col(d.del).doc(d.id).delete()}
+ else if(d.add==='gasto'){if(v('gn'))await put('gastos',{nombre:v('gn'),monto:+v('gm')||0})}
+ else if(d.add==='prod'){if(v('pnm'))await put('productos',{nombre:v('pnm'),margen:+v('pmg')||0,min:+v('pmi')||0,max:+v('pma')||0,pct:false})}
+ else if(d.add==='area'){if(v('an'))await put('areas',{nombre:v('an'),puntos:[]})}
+ else if(d.addem){if(v('em-'+d.addem))await put('empleados',{nombre:v('em-'+d.addem),area:d.addem})}
+ else if(d.addpt||d.delpt){const a=L('areas').find(x=>x.id===(d.addpt||d.delpt)),p=[...(a.puntos||[])];
+  if(d.addpt){if(!v('pt-'+a.id))return;p.push(v('pt-'+a.id))}else p.splice(+d.i,1);await col('areas').doc(a.id).update({puntos:p})}
+ else if(d.add==='stock'){const pr=L('productos').find(x=>x.id===v('sp'));if(!pr)return alert('Elegí un producto');
+ const tk=(v('sk')||'').split(/[\s;+]+/).filter(Boolean),kgs=tk.map(x=>parseFloat(x.replace(',','.'))).filter(x=>!isNaN(x)),tipo=v('st');
+ if(kgs.length!==tk.length)return alert('Revisá los kilos: usá solo números separados por espacios');
+ let cant=v('sc')===''?null:+v('sc');
+ if(tipo==='merma'){if(!kgs.length)return alert('Cargá los kilos de merma');cant=0}
+ else{if(cant===null)cant=kgs.length;if(!cant&&!kgs.length)return alert('Cargá unidades o kilos');
+  if(!pr.pct&&kgs.length>1&&kgs.length!==cant)return alert('Cargaste '+cant+' unidades pero '+kgs.length+' pesajes')}
+ const o={tipo,prod:pr.id,cant,kg:Math.round(kgs.reduce((a,x)=>a+x,0)*100)/100,fecha:v('sf'),nota:v('sn')||'',ts:Date.now()+''};if(kgs.length>1)o.kgs=kgs;
+ sf0={st:tipo,sp:pr.id,sf:v('sf')};await put('stock',o);alert('Guardado')}
+ else if(d.save){const a=L('areas').find(x=>x.id===($('#ca')||{}).value),em=L('empleados').find(x=>x.id===($('#ce')||{}).value);let n=0;
+  for(const s of document.querySelectorAll('[data-pt]')){if(!s.value)continue;const i=+s.dataset.pt;
+   await put('controles',{fecha:ctl.fecha,area:a.id,emp:em.id,nom:em.nombre,punto:a.puntos[i],res:s.value,obs:document.querySelector(`[data-ob="${i}"]`).value,ts:Date.now()+''});n++}
+  alert(n?n+' puntos guardados':'No marcaste ningún punto');render()}}catch(x){alert('No se pudo guardar: '+(x.message||x))}});
+/* ====== CONFIGURACIÓN DE LA NUBE (Supabase) ======
+   Pegá abajo la clave pública (anon / publishable) de tu proyecto. Si la dejás vacía, la app funciona en "modo local". */
+const SB={url:"https://hgojetyozxmhxztcsaaj.supabase.co",key:"sb_publishable_HfF446dlVCG33angp-EdMQ_cEEqOqxd"};
+function mkAdapter(){
+ if(SB.key&&window.supabase){const s=supabase.createClient(SB.url,SB.key),T='datos',LD={};
+  const rl=c=>LD[c]&&LD[c]();const ck=r=>{if(r.error)throw r.error};
+  return{mode:'nube',collection:c=>({doc:id=>({
+   set:async o=>{ck(await s.from(T).upsert({coleccion:c,id,data:o,updated_at:new Date().toISOString()}));rl(c)},
+   update:async o=>{const r=await s.from(T).select('data').eq('coleccion',c).eq('id',id).single();ck(r);ck(await s.from(T).upsert({coleccion:c,id,data:{...r.data.data,...o},updated_at:new Date().toISOString()}));rl(c)},
+   delete:async()=>{ck(await s.from(T).delete().eq('coleccion',c).eq('id',id));rl(c)}}),
+   onSnapshot:(n,e)=>{LD[c]=async()=>{const r=await s.from(T).select('id,data').eq('coleccion',c);if(r.error)return e&&e(r.error);n({docs:r.data.map(x=>({id:x.id,data:()=>x.data}))})};
+    LD[c]();s.channel('rt-'+c).on('postgres_changes',{event:'*',schema:'public',table:T},LD[c]).subscribe();setInterval(LD[c],15000)}})}}
+ const K='prestigio_',get=c=>JSON.parse(localStorage.getItem(K+c)||'{}'),subs={};
+ const emit=c=>(subs[c]||[]).forEach(n=>n({docs:Object.entries(get(c)).map(([id,v])=>({id,data:()=>v}))}));
+ const save=(c,o)=>{localStorage.setItem(K+c,JSON.stringify(o));emit(c)};
+ return{mode:'local',collection:c=>({doc:id=>({set:async o=>{const m=get(c);m[id]=o;save(c,m)},update:async o=>{const m=get(c);m[id]={...m[id],...o};save(c,m)},delete:async()=>{const m=get(c);delete m[id];save(c,m)}}),
+  onSnapshot:n=>{(subs[c]=subs[c]||[]).push(n);setTimeout(()=>emit(c))}})}}
+const SEED={gastos:[['Empleados (8)',8e6],['Luz',2.5e6],['Impuestos',6e5],['Estudio contable',5e5],['Bolsas',4e5],['Varios (asesoramiento externo, marketing)',1.9e6]].map(([nombre,monto])=>({nombre,monto})),
+ productos:[{nombre:'Media res',margen:240000,min:12,max:15,pct:false},{nombre:'Cerdo entero',margen:80000,min:18,max:20,pct:false},{nombre:'Achuras ($ comprados)',margen:.6,min:8e5,max:8e5,pct:true},{nombre:'Pollo (cajas)',margen:50000,min:20,max:20,pct:false}],
+ areas:['Carniceros de mostrador','Carniceros de cámara','Reposición y limpieza','Caja','Elaboración'].map(nombre=>({nombre,puntos:[]}))};
+document.addEventListener('click',async e=>{if(!e.target.closest('[data-seed]'))return;
+ for(const c in SEED)for(const o of SEED[c])await put(c,o)});
+const _vT=vTablero;vTablero=function(){const e=['gastos','productos','areas'].every(c=>D[c]&&!D[c].length);
+ return (e?'<div class="c"><b>Base vacía.</b> <button class="b" data-seed>Cargar datos iniciales de El Prestigio</button></div>':'')+_vT()};
+db=mkAdapter();
+if(db.mode==='local')document.querySelector('header h1').insertAdjacentHTML('afterend','<div style="font-size:12px;opacity:.9;margin:-4px 0 6px">Modo local: los datos se guardan solo en este dispositivo.</div>');
+COLS.forEach(n=>col(n).onSnapshot(s=>{D[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>{$('#app').innerHTML='<div class="c bad">Error de datos: '+esc(e.message)+'</div>'}));
+</script></body></html>
